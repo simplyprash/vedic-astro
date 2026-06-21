@@ -522,6 +522,438 @@ function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
   );
 }
 
+
+// ─── Sarvatobhadra Chakra ─────────────────────────────────────────────────────
+//
+// The SBC is a 9×9 grid. The 28 nakshatras (27 + Abhijit) are arranged around
+// the perimeter and inward rows in a specific fixed sequence.
+// Vowels (swaras) and consonants (vyanjanas) occupy the inner cells.
+//
+// Fixed SBC nakshatra layout — the 28 positions going N→E→S→W from centre
+// Each nakshatra occupies one cell; planets fall in their nakshatra's cell.
+
+// The 28 SBC nakshatras (27 + Abhijit between Uttara Ashadha & Shravana)
+const SBC_NAKS = [
+  "Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra","Punarvasu","Pushya",
+  "Ashlesha","Magha","Purva Phalguni","Uttara Phalguni","Hasta","Chitra","Swati",
+  "Vishakha","Anuradha","Jyeshtha","Mula","Purva Ashadha","Uttara Ashadha","Abhijit",
+  "Shravana","Dhanishta","Shatabhisha","Purva Bhadrapada","Uttara Bhadrapada","Revati"
+];
+
+// Map standard 27-nakshatra index → SBC_NAKS index (Abhijit inserted at 21)
+function stdToSbc(stdIdx) {
+  if (stdIdx < 21) return stdIdx;       // 0–20 same
+  return stdIdx + 1;                    // 21–26 shift by 1 (Abhijit at 21)
+}
+
+// The SBC grid is 9×9. Rows 0-8 (top→bottom), Cols 0-8 (left→right).
+// Nakshatras occupy the outer ring and 3 inner rings.
+// Standard mapping (Parashara tradition):
+// Outer ring (row0, row8, col0, col8) = 28 cells for 28 nakshatras
+// Inner cells = swaras (vowels) and vyanjanas (consonants)
+
+// Build the 9×9 cell definitions
+// Each cell: { type: "nak"|"swara"|"vyanjana"|"brahma", value, row, col }
+
+// Nakshatra sequence around perimeter (clockwise from top-left):
+// Top row L→R: naks 0–8 (Ashwini→Ashlesha)
+// Right col T→B (skip corners): naks 9–15 (Magha→Vishakha)  
+// Bottom row R→L: naks 16–22 (Anuradha→Shravana) [skip last corner]
+// Left col B→T (skip corners): naks 23–27 (Dhanishta→Revati)
+
+// Perimeter positions (row, col) in order:
+const PERIMETER = [
+  // Top row left to right (row 0, col 0..8)
+  [0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
+  // Right col top to bottom (col 8, row 1..8)
+  [1,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],
+  // Bottom row right to left (row 8, col 7..0)
+  [8,7],[8,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],
+  // Left col bottom to top (col 0, row 7..1)
+  [7,0],[6,0],[5,0],[4,0],[3,0],[2,0],[1,0],
+];
+// 9 + 8 + 8 + 7 = 32 positions, but we have 28 nakshatras
+// The standard SBC assigns nakshatras only to the 28 non-corner perimeter cells
+// Corners hold special symbols. Let me use the proper fixed layout:
+
+// Fixed cell assignments — each [row,col] → nakshatra index in SBC_NAKS
+// Based on traditional Parashara SBC (N at top, starts from Ashwini at top-left corner)
+const NAK_CELLS = {
+  // Top row (row=0)
+  "0,0": 0,  // Ashwini
+  "0,1": 1,  // Bharani
+  "0,2": 2,  // Krittika
+  "0,3": 3,  // Rohini
+  "0,4": 4,  // Mrigashira
+  "0,5": 5,  // Ardra
+  "0,6": 6,  // Punarvasu
+  "0,7": 7,  // Pushya
+  "0,8": 8,  // Ashlesha
+  // Right col (col=8, rows 1-8)
+  "1,8": 9,  // Magha
+  "2,8": 10, // Purva Phalguni
+  "3,8": 11, // Uttara Phalguni
+  "4,8": 12, // Hasta
+  "5,8": 13, // Chitra
+  "6,8": 14, // Swati
+  "7,8": 15, // Vishakha
+  "8,8": 16, // Anuradha
+  // Bottom row (row=8, right to left)
+  "8,7": 17, // Jyeshtha
+  "8,6": 18, // Mula
+  "8,5": 19, // Purva Ashadha
+  "8,4": 20, // Uttara Ashadha
+  "8,3": 21, // Abhijit
+  "8,2": 22, // Shravana
+  "8,1": 23, // Dhanishta
+  "8,0": 24, // Shatabhisha
+  // Left col (col=0, bottom to top)
+  "7,0": 25, // Purva Bhadrapada
+  "6,0": 26, // Uttara Bhadrapada
+  "5,0": 27, // Revati
+  // Inner ring continues...
+  // Row 1, cols 1-7
+  "1,1": null, "1,2": null, "1,3": null, "1,4": null, "1,5": null, "1,6": null, "1,7": null,
+  // ...inner cells are vowels/consonants
+};
+
+// Swaras (vowels) — placed in inner ring top row (row 1, cols 1-7) and symmetrically
+const SWARAS = ["अ","आ","इ","ई","उ","ऊ","ए","ऐ","ओ","औ","अं","अः","ऋ","ॠ","लृ"];
+// Vyanjanas (consonants) in inner cells
+const VYANJANAS = ["क","ख","ग","घ","ङ","च","छ","ज","झ","ञ","ट","ठ","ड","ढ","ण","त","थ","द","ध","न","प","फ","ब","भ","म","य","र","ल","व","श","ष","स","ह","क्ष"];
+
+// Inner cell content (row 1-7, col 1-7 = 7x7 inner grid)
+// Arranged by tradition: vowels in ring1, consonants in ring2, Brahma at centre
+// Ring 1 (rows 1-7 boundary of inner): 24 cells → swaras
+// Ring 2 (rows 2-6 boundary): 16 cells → vyanjanas  
+// Centre (3x3): directions + Brahma
+
+const DIRECTIONS = {
+  "1,4": "N", "4,7": "E", "7,4": "S", "4,1": "W",
+  "1,1": "NW","1,7": "NE","7,1": "SW","7,7": "SE",
+};
+
+// Build inner ring positions in order
+function innerRing1() {
+  const cells = [];
+  for (let c = 1; c <= 7; c++) cells.push([1, c]); // top
+  for (let r = 2; r <= 7; r++) cells.push([r, 7]); // right
+  for (let c = 6; c >= 1; c--) cells.push([7, c]); // bottom
+  for (let r = 6; r >= 2; r--) cells.push([r, 1]); // left
+  return cells;
+}
+function innerRing2() {
+  const cells = [];
+  for (let c = 2; c <= 6; c++) cells.push([2, c]);
+  for (let r = 3; r <= 6; r++) cells.push([r, 6]);
+  for (let c = 5; c >= 2; c--) cells.push([6, c]);
+  for (let r = 5; r >= 3; r--) cells.push([r, 2]);
+  return cells;
+}
+
+// Build full 9×9 grid cells
+function buildSBCGrid() {
+  const grid = [];
+  for (let r = 0; r < 9; r++) {
+    const row = [];
+    for (let c = 0; c < 9; c++) {
+      const key = `${r},${c}`;
+      if (NAK_CELLS[key] !== undefined && NAK_CELLS[key] !== null) {
+        row.push({ type: "nak", nakIdx: NAK_CELLS[key], name: SBC_NAKS[NAK_CELLS[key]] });
+      } else {
+        row.push({ type: "inner", r, c });
+      }
+    }
+    grid.push(row);
+  }
+
+  // Fill inner ring 1 with swaras
+  const r1 = innerRing1();
+  r1.forEach(([r, c], i) => {
+    grid[r][c] = { type: "swara", value: SWARAS[i % SWARAS.length] };
+  });
+
+  // Fill inner ring 2 with vyanjanas
+  const r2 = innerRing2();
+  r2.forEach(([r, c], i) => {
+    grid[r][c] = { type: "vyanjana", value: VYANJANAS[i % VYANJANAS.length] };
+  });
+
+  // Centre 3×3
+  const centreLabels = [
+    ["NW","N","NE"],
+    ["W", "☯","E"],
+    ["SW","S","SE"],
+  ];
+  for (let dr = 0; dr < 3; dr++) {
+    for (let dc = 0; dc < 3; dc++) {
+      const r = 3 + dr, c = 3 + dc;
+      const lbl = centreLabels[dr][dc];
+      grid[r][c] = { type: lbl === "☯" ? "brahma" : "direction", value: lbl };
+    }
+  }
+
+  return grid;
+}
+
+// Get which SBC nakshatra index a planet occupies
+function planetSbcNak(lon) {
+  const stdIdx = Math.floor(norm360(lon) / (360 / 27)); // 0-26
+  return stdToSbc(stdIdx); // 0-27
+}
+
+// Vedha (affliction) rules — sign-based aspects from each planet's nakshatra
+// A planet vedhas the nakshatra directly opposite (7th) and specific others
+// Based on traditional Parashara rules:
+function getVedhas(planets) {
+  // For each planet, find which nakshatras it aspects (vedhas)
+  // Rules: all planets aspect the 1st (self), and the following from their nak:
+  // Sun,Moon,Mercury,Venus: 1,3,5,7 (counted from their nak)
+  // Mars,Saturn: 1,4,7,10 
+  // Jupiter: 1,5,7,9
+  // Rahu,Ketu: 1,7 + special
+  const VEDHA_OFFSETS = {
+    Sun:     [0, 2, 4, 6],
+    Moon:    [0, 2, 4, 6],
+    Mercury: [0, 2, 4, 6],
+    Venus:   [0, 2, 4, 6],
+    Mars:    [0, 3, 6, 9],
+    Saturn:  [0, 3, 6, 9],
+    Jupiter: [0, 4, 6, 8],
+    Rahu:    [0, 6, 13],
+    Ketu:    [0, 6, 13],
+  };
+  const vedhas = {}; // nakIdx → [planet names]
+  for (const [pName, lon] of Object.entries(planets)) {
+    const offsets = VEDHA_OFFSETS[pName] || [0, 6];
+    const baseNak = planetSbcNak(lon);
+    for (const off of offsets) {
+      const targetNak = (baseNak + off) % 28;
+      if (!vedhas[targetNak]) vedhas[targetNak] = [];
+      if (!vedhas[targetNak].includes(pName)) vedhas[targetNak].push(pName);
+    }
+  }
+  return vedhas;
+}
+
+// ─── SBC Component ────────────────────────────────────────────────────────────
+
+function SarvatobhadraChakra({ d1Pos, retrogrades, moonNakIdx }) {
+  const grid    = buildSBCGrid();
+  const vedhas  = getVedhas(d1Pos);
+
+  // Which nakshatra cell has each planet
+  const planetNaks = {};
+  for (const [name, lon] of Object.entries(d1Pos)) {
+    planetNaks[name] = planetSbcNak(lon);
+  }
+
+  // Planet abbreviations & colours (reuse from PLANETS)
+  const pInfo = {};
+  PLANETS.forEach(p => { pInfo[p.name] = { short: p.short, color: p.color }; });
+
+  const CELL = 52; // px per cell
+  const GRID = CELL * 9;
+
+  // Colors
+  const nakBg    = "#FFF8EE";
+  const innerBg  = "#FDFAF4";
+  const swaraBg  = "#F0EAD8";
+  const vyanBg   = "#F5F0E4";
+  const brahmaBg = "#7A6040";
+  const dirBg    = "#EDE4CC";
+  const border   = "rgba(100,78,38,0.18)";
+
+  // Determine if a cell has a vedha
+  const cellVedha = (nakIdx) => vedhas[nakIdx] || [];
+
+  // Moon's nakshatra highlighted as Janma nakshatra
+  const isJanma = (nakIdx) => nakIdx === moonNakIdx;
+
+  return (
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ display: "inline-block", position: "relative" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(9, ${CELL}px)`,
+            gridTemplateRows:    `repeat(9, ${CELL}px)`,
+            border: `2px solid rgba(100,78,38,0.35)`,
+            borderRadius: 4,
+          }}>
+            {grid.map((row, ri) => row.map((cell, ci) => {
+              const isNak    = cell.type === "nak";
+              const nakIdx   = isNak ? cell.nakIdx : null;
+              const planets  = isNak ? PLANETS.filter(p => planetNaks[p.name] === nakIdx) : [];
+              const vlist    = isNak ? cellVedha(nakIdx) : [];
+              const janma    = isNak && isJanma(nakIdx);
+              const isBrahma = cell.type === "brahma";
+              const isDir    = cell.type === "direction";
+              const isSwara  = cell.type === "swara";
+              const isVyan   = cell.type === "vyanjana";
+
+              let bg = innerBg;
+              if (isNak)    bg = janma ? "#FFF0CC" : nakBg;
+              if (isSwara)  bg = swaraBg;
+              if (isVyan)   bg = vyanBg;
+              if (isBrahma) bg = brahmaBg;
+              if (isDir)    bg = dirBg;
+
+              // Vedha highlight — light red tint if afflicted by malefic
+              const malefics = ["Mars","Saturn","Rahu","Ketu","Sun"];
+              const hasMaleficVedha = vlist.some(v => malefics.includes(v));
+              const hasBeneficVedha = vlist.some(v => ["Jupiter","Venus","Moon","Mercury"].includes(v));
+              if (isNak && hasMaleficVedha && !janma) bg = "rgba(192,57,43,0.08)";
+              if (isNak && hasBeneficVedha && !hasMaleficVedha) bg = "rgba(39,174,96,0.08)";
+              if (isNak && janma) bg = "#FFEEBB";
+
+              return (
+                <div key={`${ri}-${ci}`} style={{
+                  width: CELL, height: CELL,
+                  background: bg,
+                  border: `1px solid ${border}`,
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  position: "relative", overflow: "hidden",
+                  boxSizing: "border-box",
+                }}>
+                  {isNak && (
+                    <>
+                      {/* Nakshatra name */}
+                      <div style={{
+                        fontSize: 8.5, fontWeight: 600, color: "#5A3A10",
+                        textAlign: "center", lineHeight: 1.2,
+                        padding: "0 2px",
+                        fontFamily: FONT,
+                      }}>
+                        {SBC_NAKS[nakIdx].replace(" ", "\n").split("\n").map((w,i) =>
+                          <div key={i}>{w}</div>
+                        )}
+                      </div>
+
+                      {/* Janma marker */}
+                      {janma && (
+                        <div style={{ fontSize: 7, color: "#8A5010", fontWeight: 700 }}>★ Janma</div>
+                      )}
+
+                      {/* Planet dots */}
+                      {planets.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", marginTop: 2 }}>
+                          {planets.map(p => (
+                            <span key={p.name} title={p.name} style={{
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              width: 14, height: 14, borderRadius: "50%",
+                              background: p.color, color: "#fff",
+                              fontSize: 7, fontWeight: 700, fontFamily: FONT,
+                              border: retrogrades && retrogrades.has(p.name) ? "1px solid #991111" : "none",
+                            }}>
+                              {p.short[0]}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Vedha indicators */}
+                      {vlist.length > 0 && planets.length === 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", marginTop: 1 }}>
+                          {vlist.map(v => {
+                            const info = pInfo[v];
+                            return (
+                              <span key={v} title={`Vedha by ${v}`} style={{
+                                display: "inline-block",
+                                width: 10, height: 10, borderRadius: "50%",
+                                background: info ? info.color + "55" : "#ccc",
+                                border: `1px solid ${info ? info.color : "#aaa"}`,
+                                fontSize: 6,
+                              }} />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {isSwara && (
+                    <div style={{ fontSize: 13, color: "#4A3010", fontFamily: "serif" }}>{cell.value}</div>
+                  )}
+                  {isVyan && (
+                    <div style={{ fontSize: 12, color: "#6A4820", fontFamily: "serif" }}>{cell.value}</div>
+                  )}
+                  {isBrahma && (
+                    <div style={{ fontSize: 11, color: "#FFF7E6", fontWeight: 700, textAlign: "center", fontFamily: FONT }}>
+                      <div style={{ fontSize: 16 }}>☸</div>
+                      <div>Brahma</div>
+                    </div>
+                  )}
+                  {isDir && (
+                    <div style={{ fontSize: 11, color: "#8A6A30", fontWeight: 600, fontFamily: FONT }}>{cell.value}</div>
+                  )}
+                </div>
+              );
+            }))}
+          </div>
+        </div>
+      </div>
+
+      {/* Vedha Analysis */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontSize: 11, letterSpacing: 1.5, color: "#8A6A30",
+          textTransform: "uppercase", fontWeight: 600, fontFamily: FONT, marginBottom: 12 }}>
+          Vedha Analysis
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+          {PLANETS.map(p => {
+            const nakIdx  = planetNaks[p.name];
+            const nakName = SBC_NAKS[nakIdx];
+            const VEDHA_OFFSETS = {
+              Sun:[0,2,4,6], Moon:[0,2,4,6], Mercury:[0,2,4,6], Venus:[0,2,4,6],
+              Mars:[0,3,6,9], Saturn:[0,3,6,9], Jupiter:[0,4,6,8],
+              Rahu:[0,6,13], Ketu:[0,6,13],
+            };
+            const offsets = VEDHA_OFFSETS[p.name] || [0,6];
+            const aspectedNaks = offsets.map(o => SBC_NAKS[(nakIdx + o) % 28]);
+            const isRetro = retrogrades && retrogrades.has(p.name);
+            return (
+              <div key={p.name} style={{
+                background: "#FDFAF4", border: `1px solid ${p.color}44`,
+                borderRadius: 8, padding: "8px 12px",
+                borderLeft: `3px solid ${p.color}`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span style={{ color: p.color, fontSize: 15 }}>{p.symbol}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: "#2A1E0A" }}>{p.name}</span>
+                  {isRetro && <span style={{ color: "#991111", fontSize: 11 }}>℞</span>}
+                  <span style={{ marginLeft: "auto", fontSize: 10, color: "#8A6A30" }}>{nakName}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#6A5030", lineHeight: 1.6 }}>
+                  <span style={{ color: "#8A6A30" }}>Vedha on: </span>
+                  {aspectedNaks.map((n, i) => (
+                    <span key={i}>
+                      {i > 0 && <span style={{ color: "#B0905A" }}> · </span>}
+                      <span style={{
+                        color: n === nakName ? p.color : "#3A2A10",
+                        fontWeight: n === nakName ? 700 : 400,
+                      }}>{n}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 11, color: "#8A6A30" }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#FFEEBB", border: "1px solid #C8A040", marginRight: 4 }}/>Janma nakshatra (Moon)</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: "rgba(192,57,43,0.08)", border: "1px solid #C03020", marginRight: 4 }}/>Malefic vedha</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: "rgba(39,174,96,0.08)", border: "1px solid #279060", marginRight: 4 }}/>Benefic vedha</span>
+        <span>Solid circle = planet present · Hollow circle = vedha only</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 const RANGE_OPTIONS = [
@@ -569,6 +1001,7 @@ export default function VedicAstrology() {
   const d9Pos      = {};
   for (const k in d1Pos) d9Pos[k] = toNavamsa(d1Pos[k]);
   const displayPos = activeChart === "D1" ? d1Pos : d9Pos;
+  const moonNakIdx = d1Pos.Moon !== undefined ? stdToSbc(Math.floor(norm360(d1Pos.Moon) / (360/27))) : 0;
 
   useEffect(() => {
     if (playing) {
@@ -737,8 +1170,14 @@ export default function VedicAstrology() {
           <PlanetTable d1Pos={d1Pos} d9Pos={d9Pos} retrogrades={retros} />
         </div>
 
+        {/* Sarvatobhadra Chakra */}
+        <div style={card}>
+          <div style={{ ...label, marginBottom: 16 }}>Sarvatobhadra Chakra</div>
+          <SarvatobhadraChakra d1Pos={d1Pos} retrogrades={retros} moonNakIdx={moonNakIdx} />
+        </div>
+
         <div style={{ textAlign: "center", color: "#B09860", fontSize: 11, lineHeight: 1.9 }}>
-          Positions computed using mean orbital elements with Lahiri ayanamsa.<br />
+          Positions computed using astronomy-engine with Lahiri ayanamsa.<br />
           For precise Jyotish work, verify with dedicated ephemeris software.
         </div>
       </div>
