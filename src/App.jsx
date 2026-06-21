@@ -17,7 +17,7 @@ function norm360(x) { return ((x % 360) + 360) % 360; }
 // ── Lahiri ayanamsa ──────────────────────────────────────────────────────────
 function lahiriAyanamsa(jd) {
   const T = (jd - 2451545.0) / 36525;
-  return 23.85550 + 1.39697 * T;
+  return 23.7614 + 1.3970 * T;
 }
 
 // ── Planetary positions using astronomy-engine (NASA JPL accuracy) ───────────
