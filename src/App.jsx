@@ -135,158 +135,201 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     const cx = size / 2, cy = size / 2;
     const R  = size / 2 - 10;
 
-    // Background
+    // ── Full background ────────────────────────────────────
     const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R + 10);
-    bgGrad.addColorStop(0, "#FEFCF7");
-    bgGrad.addColorStop(1, "#EEE8D8");
+    bgGrad.addColorStop(0,   "#FEFCF8");
+    bgGrad.addColorStop(0.6, "#F5EFE0");
+    bgGrad.addColorStop(1,   "#EAE0C8");
     ctx.beginPath(); ctx.arc(cx, cy, R + 10, 0, Math.PI * 2);
     ctx.fillStyle = bgGrad; ctx.fill();
 
-    // Outer border ring
+    // Outer border
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(100,80,40,0.25)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = "rgba(100,78,38,0.28)"; ctx.lineWidth = 1.5; ctx.stroke();
 
-    // zodInner is now the outer edge of the zodiac label ring
-    // We remove the big symbol band — just keep a thin label ring
-    const zodOuter = R * 0.99;
-    const zodInner = R * 0.84;  // thinner band — just enough for sign abbr
+    // Layout radii
+    const zodOuter = R * 0.99;   // outer edge of zodiac band
+    const zodInner = R * 0.82;   // inner edge of zodiac band → planet area starts here
     const zodMid   = (zodOuter + zodInner) / 2;
 
-    // ── Zodiac band: coloured sectors with abbrev ─────────
+    // Planets are spread from orbitMin to orbitMax inside zodInner
+    // We'll use fixed pixel radii so they're evenly spaced with room
+    const orbitMin = zodInner * 0.12;  // innermost orbit (Moon) — well clear of Earth
+    const orbitMax = zodInner * 0.92;  // outermost orbit (Rahu/Ketu) — just inside band
+
+    // Pre-compute orbit radii per planet using their orbitFrac to map into [orbitMin, orbitMax]
+    const minFrac = Math.min(...PLANETS.map(p => p.orbitFrac));
+    const maxFrac = Math.max(...PLANETS.map(p => p.orbitFrac));
+    const getOrbitR = (frac) =>
+      orbitMin + ((frac - minFrac) / (maxFrac - minFrac)) * (orbitMax - orbitMin);
+
+    // ── Zodiac band sectors (annular, NOT pie slices) ──────
     for (let i = 0; i < 12; i++) {
       const a0   = degToRad(i * 30 - 90);
       const a1   = degToRad((i + 1) * 30 - 90);
       const sign = ZODIAC_SIGNS[i];
 
-      // Filled sector
-      ctx.beginPath(); ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, zodOuter, a0, a1); ctx.closePath();
-      ctx.fillStyle = ELEMENT_BG[sign.element]; ctx.fill();
+      // Annular sector fill (outer arc → inner arc, no line to centre)
+      ctx.beginPath();
+      ctx.arc(cx, cy, zodOuter, a0, a1, false);
+      ctx.arc(cx, cy, zodInner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = ELEMENT_BG[sign.element];
+      ctx.fill();
 
-      // Spoke at sector start
+      // Sector divider spoke (only in the band, not to centre)
       ctx.beginPath();
       ctx.moveTo(cx + zodInner * Math.cos(a0), cy + zodInner * Math.sin(a0));
       ctx.lineTo(cx + zodOuter * Math.cos(a0), cy + zodOuter * Math.sin(a0));
-      ctx.strokeStyle = "rgba(100,80,40,0.22)"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = "rgba(100,78,38,0.22)"; ctx.lineWidth = 1; ctx.stroke();
 
-      // 10° tick marks inside the band
+      // 10° tick marks
       for (let d = 10; d < 30; d += 10) {
         const ta = degToRad(i * 30 + d - 90);
-        const t0 = zodInner, t1 = zodInner + (zodOuter - zodInner) * 0.3;
+        const t0 = zodInner;
+        const t1 = zodInner + (zodOuter - zodInner) * 0.28;
         ctx.beginPath();
         ctx.moveTo(cx + t0 * Math.cos(ta), cy + t0 * Math.sin(ta));
         ctx.lineTo(cx + t1 * Math.cos(ta), cy + t1 * Math.sin(ta));
-        ctx.strokeStyle = "rgba(100,80,40,0.18)"; ctx.lineWidth = 0.8; ctx.stroke();
+        ctx.strokeStyle = "rgba(100,78,38,0.16)"; ctx.lineWidth = 0.8; ctx.stroke();
       }
 
-      // Sign abbreviation + symbol — compact, in the thin band
+      // Symbol + abbr, rotated to fit in band
       const mid = degToRad(i * 30 + 15 - 90);
-      const sx  = cx + zodMid * Math.cos(mid);
-      const sy  = cy + zodMid * Math.sin(mid);
       ctx.save();
-      ctx.translate(sx, sy);
+      ctx.translate(cx + zodMid * Math.cos(mid), cy + zodMid * Math.sin(mid));
       ctx.rotate(mid + Math.PI / 2);
-      // Symbol
-      ctx.font = `bold ${Math.round(size * 0.032)}px serif`;
-      ctx.fillStyle = sign.hue;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(sign.symbol, 0, -size * 0.012);
-      // Abbreviation below symbol
-      ctx.font = `600 ${Math.round(size * 0.020)}px ${FONT}`;
-      ctx.fillStyle = sign.hue + "BB";
-      ctx.fillText(sign.abbr, 0, size * 0.016);
+      ctx.font = `bold ${Math.round(size * 0.030)}px serif`;
+      ctx.fillStyle = sign.hue;
+      ctx.fillText(sign.symbol, 0, -size * 0.011);
+      ctx.font = `600 ${Math.round(size * 0.018)}px ${FONT}`;
+      ctx.fillStyle = sign.hue + "AA";
+      ctx.fillText(sign.abbr, 0, size * 0.015);
       ctx.restore();
     }
 
-    // Band borders
+    // Band border rings
     [zodOuter, zodInner].forEach(r => {
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(100,80,40,0.30)"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = "rgba(100,78,38,0.32)"; ctx.lineWidth = 1.3; ctx.stroke();
     });
 
-    // ── Orbit halos (light filled band per orbit) ─────────
+    // ── Zodiac division lines extended to centre (faint) ───
+    // These help see which sign a planet is transiting through
+    for (let i = 0; i < 12; i++) {
+      const a = degToRad(i * 30 - 90);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + zodInner * Math.cos(a), cy + zodInner * Math.sin(a));
+      ctx.strokeStyle = "rgba(100,78,38,0.07)"; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    // ── Orbit rings (dashed circles, no fill painting) ────
     const usedFracs = [...new Set(PLANETS.map(p => p.orbitFrac))];
     usedFracs.forEach(f => {
-      const r = f * zodInner;
-      const bw = size * 0.017; // band half-width
-      // Subtle filled ring
-      ctx.beginPath(); ctx.arc(cx, cy, r + bw, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(140,110,60,0.04)"; ctx.fill();
-      ctx.beginPath(); ctx.arc(cx, cy, r - bw, 0, Math.PI * 2);
-      ctx.fillStyle = "#FEFCF7"; ctx.fill(); // clear inner
-      // Dashed circle line
+      const r = getOrbitR(f);
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.setLineDash([3, 9]);
-      ctx.strokeStyle = "rgba(100,80,40,0.14)"; ctx.lineWidth = 0.9;
+      ctx.setLineDash([3, 8]);
+      ctx.strokeStyle = "rgba(100,78,38,0.13)"; ctx.lineWidth = 0.9;
       ctx.stroke(); ctx.setLineDash([]);
+    });
+
+    // ── Orbit halo rings (annular rings, NO fill inside) ──
+    // Draw them as stroked wide rings using lineWidth instead of fill
+    usedFracs.forEach(f => {
+      const r = getOrbitR(f);
+      const bw = Math.max(3, size * 0.014);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(140,110,55,0.06)";
+      ctx.lineWidth = bw * 2;
+      ctx.stroke();
+    });
+
+    // ── Radial lines from Earth to each planet (faint) ────
+    PLANETS.forEach((p) => {
+      const lon    = positions[p.name] ?? 0;
+      const angle  = degToRad(lon - 90);
+      const orbitR = getOrbitR(p.orbitFrac);
+      const px     = cx + orbitR * Math.cos(angle);
+      const py     = cy + orbitR * Math.sin(angle);
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, py);
+      ctx.strokeStyle = p.color + "1A"; ctx.lineWidth = 0.8; ctx.stroke();
     });
 
     // ── Planets ───────────────────────────────────────────
     PLANETS.forEach((p) => {
-      const lon    = positions[p.name] ?? 0;
-      const angle  = degToRad(lon - 90);
-      const orbitR = p.orbitFrac * zodInner;
-      const px     = cx + orbitR * Math.cos(angle);
-      const py     = cy + orbitR * Math.sin(angle);
+      const lon     = positions[p.name] ?? 0;
+      const angle   = degToRad(lon - 90);
+      const orbitR  = getOrbitR(p.orbitFrac);
+      const px      = cx + orbitR * Math.cos(angle);
+      const py      = cy + orbitR * Math.sin(angle);
       const isRetro = retrogrades && retrogrades.has(p.name);
 
-      // Faint line from Earth to planet
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, py);
-      ctx.strokeStyle = p.color + "22"; ctx.lineWidth = 0.8; ctx.stroke();
+      // Perpendicular angle — 90° clockwise from radial
+      // Name goes on the clockwise-perpendicular side of the dot
+      const perpAngle = angle + Math.PI / 2;
 
       // Soft glow
-      const gR = size * 0.040;
+      const gR = size * 0.034;
       const glow = ctx.createRadialGradient(px, py, 0, px, py, gR);
-      glow.addColorStop(0, p.color + "50");
-      glow.addColorStop(0.5, p.color + "18");
+      glow.addColorStop(0,   p.color + "50");
+      glow.addColorStop(0.6, p.color + "14");
       glow.addColorStop(1,   p.color + "00");
       ctx.beginPath(); ctx.arc(px, py, gR, 0, Math.PI * 2);
       ctx.fillStyle = glow; ctx.fill();
 
       // Planet dot
-      const dotR = size * 0.019;
+      const dotR = size * 0.018;
       ctx.beginPath(); ctx.arc(px, py, dotR, 0, Math.PI * 2);
       ctx.fillStyle = p.color; ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.80)"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.3; ctx.stroke();
 
-      // Label outward from Earth along the radial line
-      const labelPush = dotR + size * 0.024;
-      const lx = px + labelPush * Math.cos(angle);
-      const ly = py + labelPush * Math.sin(angle);
-
-      // Short name (+ retrograde symbol if applicable)
-      ctx.font = `700 ${Math.round(size * 0.025)}px ${FONT}`;
+      // ── Name label: perpendicular to radial (tangential)
+      // Placed just beside the dot, along the orbit arc direction
+      const nameOffset = dotR + size * 0.018;
+      const nx = px + nameOffset * Math.cos(perpAngle);
+      const ny = py + nameOffset * Math.sin(perpAngle);
+      ctx.font = `700 ${Math.round(size * 0.023)}px ${FONT}`;
       ctx.fillStyle = p.color;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      const nameLabel = isRetro ? `${p.short} ℞` : p.short;
-      ctx.fillText(nameLabel, lx, ly - size * 0.008);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      // Rotate text to be tangential so it reads along the orbit
+      ctx.save();
+      ctx.translate(nx, ny);
+      // Keep text upright — don't rotate, just offset tangentially
+      ctx.textAlign = "center";
+      ctx.fillText(isRetro ? `${p.short} ℞` : p.short, 0, 0);
+      ctx.restore();
 
-      // Degree within sign — rotated along radial, near zodiac band
+      // ── Degree label: just inside the orbit ring (towards Earth)
+      // Placed radially inward from the dot, small and subtle
+      const degOffset = dotR + size * 0.020;
       const { deg, min } = signAndDeg(lon);
       const degLabel = `${deg}°${String(min).padStart(2,"0")}′`;
-      const degR = zodInner * 0.915;
-      const dgx  = cx + degR * Math.cos(angle);
-      const dgy  = cy + degR * Math.sin(angle);
+      const dgx = px - degOffset * Math.cos(angle);
+      const dgy = py - degOffset * Math.sin(angle);
       ctx.save();
       ctx.translate(dgx, dgy);
       ctx.rotate(angle + Math.PI / 2);
-      ctx.font = `500 ${Math.round(size * 0.017)}px ${FONT}`;
-      ctx.fillStyle = p.color + "CC";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `400 ${Math.round(size * 0.015)}px ${FONT}`;
+      ctx.fillStyle = p.color + "99";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillText(degLabel, 0, 0);
       ctx.restore();
     });
 
-    // ── Earth ─────────────────────────────────────────────
-    const er = size * 0.050;
-    const eg = ctx.createRadialGradient(cx - er * 0.3, cy - er * 0.3, 0, cx, cy, er);
-    eg.addColorStop(0, "#6BAED6");
-    eg.addColorStop(0.5, "#2166AC");
-    eg.addColorStop(1, "#084594");
+    // ── Earth at centre (smaller, clean) ──────────────────
+    const er = size * 0.032;  // smaller — ~6px on 200px chart, ~15px on 480px
+    const eg = ctx.createRadialGradient(cx - er * 0.35, cy - er * 0.35, 0, cx, cy, er);
+    eg.addColorStop(0,   "#7EC8E8");
+    eg.addColorStop(0.5, "#1A76C2");
+    eg.addColorStop(1,   "#073B8A");
     ctx.beginPath(); ctx.arc(cx, cy, er, 0, Math.PI * 2);
     ctx.fillStyle = eg; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.65)"; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.font = `${Math.round(size * 0.024)}px serif`;
+    ctx.strokeStyle = "rgba(255,255,255,0.70)"; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.font = `${Math.round(size * 0.022)}px serif`;
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("🜨", cx, cy);
