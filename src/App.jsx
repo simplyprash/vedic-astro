@@ -467,9 +467,11 @@ function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
             <th style={th}>Planet</th>
             <th style={{ ...th, textAlign: "center" }}></th>
             <th style={th}>D1 Sign</th>
-            <th style={th}>D1 Deg (in sign)</th>
+            <th style={th}>Deg</th>
+            <th style={th}>Nakshatra</th>
+            <th style={{ ...th, textAlign: "center" }}>Pada</th>
             <th style={th}>D9 Sign</th>
-            <th style={th}>D9 Deg (in sign)</th>
+            <th style={th}>D9 Deg</th>
           </tr>
         </thead>
         <tbody>
