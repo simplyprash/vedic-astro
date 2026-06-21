@@ -12,23 +12,40 @@ function julianDay(date) {
 }
 
 function norm360(x) { return ((x % 360) + 360) % 360; }
-function lahiriAyanamsa(T) { return 23.85 + 0.0137 * T * 100; }
+
+// Lahiri ayanamsa per IAU/Fagan-Bradley chain, Chitrapaksha definition
+// At J2000.0 = 23.8532° ; rate ~1.3969° per Julian century
+function lahiriAyanamsa(T) {
+  return 23.85317 + 1.39699 * T;
+}
 
 function computePlanetaryPositions(date) {
   const jd = julianDay(date);
-  const T  = (jd - 2451545.0) / 36525;
+  const T  = (jd - 2451545.0) / 36525; // Julian centuries from J2000.0
   const aya = lahiriAyanamsa(T);
+
+  // Mean longitudes (Meeus, Astronomical Algorithms)
   const L = {
-    Sun:     norm360(280.46646 + 36000.76983 * T),
-    Moon:    norm360(218.3165  + 481267.8813 * T),
-    Mars:    norm360(355.433   +  19140.299  * T),
-    Mercury: norm360(252.251   + 149472.674  * T),
-    Jupiter: norm360(34.351    +   3034.906  * T),
-    Venus:   norm360(181.979   +  58517.816  * T),
-    Saturn:  norm360(50.077    +   1222.114  * T),
-    Rahu:    norm360(125.044   -   1934.136  * T),
+    Sun:     norm360(280.46646 + 36000.76983 * T + 0.0003032 * T * T),
+    Moon:    norm360(218.31665 + 481267.88134 * T - 0.001350 * T * T),
+    Mercury: norm360(252.25084 + 149472.67411 * T),
+    Venus:   norm360(181.97973 +  58517.81538 * T),
+    Mars:    norm360(355.43327 +  19140.29934 * T),
+    Jupiter: norm360( 34.35151 +   3034.90567 * T),
+    Saturn:  norm360( 50.07744 +   1222.11379 * T),
+    Rahu:    norm360(125.04452 -   1934.13626 * T + 0.002071 * T * T),
   };
   L.Ketu = norm360(L.Rahu + 180);
+
+  // Equation of centre for Sun (fixes ~2° mean vs true longitude error)
+  const Msun = norm360(357.52911 + 35999.05029 * T);
+  const Mr   = Msun * Math.PI / 180;
+  const eqC  = (1.9146 - 0.004817 * T) * Math.sin(Mr)
+             + (0.01993 - 0.000101 * T) * Math.sin(2 * Mr)
+             + 0.00029 * Math.sin(3 * Mr);
+  L.Sun = norm360(L.Sun + eqC);
+
+  // Subtract ayanamsa for sidereal (Lahiri)
   const sid = {};
   for (const k in L) sid[k] = norm360(L[k] - aya);
   return sid;
@@ -165,14 +182,14 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
 
     // ── Zodiac band sectors (annular, NOT pie slices) ──────
     for (let i = 0; i < 12; i++) {
-      const a0   = degToRad(i * 30 - 90);
-      const a1   = degToRad((i + 1) * 30 - 90);
+      const a0   = degToRad(90 - i * 30);
+      const a1   = degToRad(90 - (i + 1) * 30);
       const sign = ZODIAC_SIGNS[i];
 
       // Annular sector fill (outer arc → inner arc, no line to centre)
       ctx.beginPath();
-      ctx.arc(cx, cy, zodOuter, a0, a1, false);
-      ctx.arc(cx, cy, zodInner, a1, a0, true);
+      ctx.arc(cx, cy, zodOuter, a0, a1, true);
+      ctx.arc(cx, cy, zodInner, a1, a0, false);
       ctx.closePath();
       ctx.fillStyle = ELEMENT_BG[sign.element];
       ctx.fill();
@@ -185,7 +202,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
 
       // 10° tick marks
       for (let d = 10; d < 30; d += 10) {
-        const ta = degToRad(i * 30 + d - 90);
+        const ta = degToRad(90 - (i * 30 + d));
         const t0 = zodInner;
         const t1 = zodInner + (zodOuter - zodInner) * 0.28;
         ctx.beginPath();
@@ -195,7 +212,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
       }
 
       // Symbol + abbr, rotated to fit in band
-      const mid = degToRad(i * 30 + 15 - 90);
+      const mid = degToRad(90 - (i * 30 + 15));
       ctx.save();
       ctx.translate(cx + zodMid * Math.cos(mid), cy + zodMid * Math.sin(mid));
       ctx.rotate(mid + Math.PI / 2);
@@ -218,7 +235,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     // ── Zodiac division lines extended to centre (faint) ───
     // These help see which sign a planet is transiting through
     for (let i = 0; i < 12; i++) {
-      const a = degToRad(i * 30 - 90);
+      const a = degToRad(90 - i * 30);
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + zodInner * Math.cos(a), cy + zodInner * Math.sin(a));
@@ -260,7 +277,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     // ── Planets ───────────────────────────────────────────
     PLANETS.forEach((p) => {
       const lon     = positions[p.name] ?? 0;
-      const angle   = degToRad(lon - 90);
+      const angle   = degToRad(90 - lon);
       const orbitR  = getOrbitR(p.orbitFrac);
       const px      = cx + orbitR * Math.cos(angle);
       const py      = cy + orbitR * Math.sin(angle);
