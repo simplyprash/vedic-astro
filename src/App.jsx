@@ -266,7 +266,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     // ── Radial lines from Earth to each planet (faint) ────
     PLANETS.forEach((p) => {
       const lon    = positions[p.name] ?? 0;
-      const angle  = degToRad(lon - 90);
+      const angle  = degToRad(90 - lon);
       const orbitR = getOrbitR(p.orbitFrac);
       const px     = cx + orbitR * Math.cos(angle);
       const py     = cy + orbitR * Math.sin(angle);
