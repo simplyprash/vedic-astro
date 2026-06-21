@@ -133,6 +133,50 @@ function signAndDeg(lon) {
   return { sign: ZODIAC_SIGNS[si], signIdx: si, degInSign: dd, deg, min, sec };
 }
 
+// ─── Nakshatra Data ───────────────────────────────────────────────────────────
+
+const NAKSHATRAS = [
+  { name: "Ashwini",          abbr: "Asw", lord: "Ke" },
+  { name: "Bharani",          abbr: "Bha", lord: "Ve" },
+  { name: "Krittika",         abbr: "Kri", lord: "Su" },
+  { name: "Rohini",           abbr: "Roh", lord: "Mo" },
+  { name: "Mrigashira",       abbr: "Mrg", lord: "Ma" },
+  { name: "Ardra",            abbr: "Ard", lord: "Ra" },
+  { name: "Punarvasu",        abbr: "Pun", lord: "Ju" },
+  { name: "Pushya",           abbr: "Pus", lord: "Sa" },
+  { name: "Ashlesha",         abbr: "Asl", lord: "Me" },
+  { name: "Magha",            abbr: "Mag", lord: "Ke" },
+  { name: "Purva Phalguni",   abbr: "PPh", lord: "Ve" },
+  { name: "Uttara Phalguni",  abbr: "UPh", lord: "Su" },
+  { name: "Hasta",            abbr: "Has", lord: "Mo" },
+  { name: "Chitra",           abbr: "Chi", lord: "Ma" },
+  { name: "Swati",            abbr: "Swa", lord: "Ra" },
+  { name: "Vishakha",         abbr: "Vis", lord: "Ju" },
+  { name: "Anuradha",         abbr: "Anu", lord: "Sa" },
+  { name: "Jyeshtha",         abbr: "Jye", lord: "Me" },
+  { name: "Mula",             abbr: "Mul", lord: "Ke" },
+  { name: "Purva Ashadha",    abbr: "PAs", lord: "Ve" },
+  { name: "Uttara Ashadha",   abbr: "UAs", lord: "Su" },
+  { name: "Shravana",         abbr: "Shr", lord: "Mo" },
+  { name: "Dhanishta",        abbr: "Dha", lord: "Ma" },
+  { name: "Shatabhisha",      abbr: "Sha", lord: "Ra" },
+  { name: "Purva Bhadrapada", abbr: "PBh", lord: "Ju" },
+  { name: "Uttara Bhadrapada",abbr: "UBh", lord: "Sa" },
+  { name: "Revati",           abbr: "Rev", lord: "Me" },
+];
+
+const NAK_SIZE  = 360 / 27;        // 13.333°
+const PADA_SIZE = NAK_SIZE / 4;    // 3.333°
+
+function nakshatraOf(lon) {
+  const l    = norm360(lon);
+  const idx  = Math.floor(l / NAK_SIZE);
+  const within = l - idx * NAK_SIZE;
+  const pada   = Math.floor(within / PADA_SIZE) + 1;
+  const degInNak = within;
+  return { ...NAKSHATRAS[idx], idx, pada, degInNak };
+}
+
 // ─── Chart Canvas ─────────────────────────────────────────────────────────────
 
 function VedicChartCanvas({ positions, retrogrades, size }) {
@@ -172,7 +216,7 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     // Planets are spread from orbitMin to orbitMax inside zodInner
     // We'll use fixed pixel radii so they're evenly spaced with room
     const orbitMin = zodInner * 0.12;  // innermost orbit (Moon) — well clear of Earth
-    const orbitMax = zodInner * 0.92;  // outermost orbit (Rahu/Ketu) — just inside band
+    const orbitMax = zodInner * 0.86;  // outermost orbit — just inside nakshatra ring
 
     // Pre-compute orbit radii per planet using their orbitFrac to map into [orbitMin, orbitMax]
     const minFrac = Math.min(...PLANETS.map(p => p.orbitFrac));
@@ -230,6 +274,57 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     [zodOuter, zodInner].forEach(r => {
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(100,78,38,0.32)"; ctx.lineWidth = 1.3; ctx.stroke();
+    });
+
+    // ── Nakshatra ring — thin band just inside zodiac ─────
+    const nakOuter = zodInner;
+    const nakInner = zodInner * 0.88;
+    const nakMid   = (nakOuter + nakInner) / 2;
+
+    for (let i = 0; i < 27; i++) {
+      const a0 = degToRad(90 - i * NAK_SIZE);
+      const a1 = degToRad(90 - (i + 1) * NAK_SIZE);
+
+      // Alternating very subtle fill
+      ctx.beginPath();
+      ctx.arc(cx, cy, nakOuter, a0, a1, true);
+      ctx.arc(cx, cy, nakInner, a1, a0, false);
+      ctx.closePath();
+      ctx.fillStyle = i % 2 === 0 ? "rgba(100,78,38,0.04)" : "rgba(100,78,38,0.02)";
+      ctx.fill();
+
+      // Spoke at boundary
+      ctx.beginPath();
+      ctx.moveTo(cx + nakInner * Math.cos(a0), cy + nakInner * Math.sin(a0));
+      ctx.lineTo(cx + nakOuter * Math.cos(a0), cy + nakOuter * Math.sin(a0));
+      ctx.strokeStyle = "rgba(100,78,38,0.18)"; ctx.lineWidth = 0.6; ctx.stroke();
+
+      // Pada ticks (3 internal ticks dividing into 4 padas)
+      for (let p = 1; p < 4; p++) {
+        const ta = degToRad(90 - (i * NAK_SIZE + p * PADA_SIZE));
+        const t0 = nakInner, t1 = nakInner + (nakOuter - nakInner) * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(cx + t0 * Math.cos(ta), cy + t0 * Math.sin(ta));
+        ctx.lineTo(cx + t1 * Math.cos(ta), cy + t1 * Math.sin(ta));
+        ctx.strokeStyle = "rgba(100,78,38,0.12)"; ctx.lineWidth = 0.5; ctx.stroke();
+      }
+
+      // Abbreviated name — rotated radially
+      const midAngle = degToRad(90 - (i * NAK_SIZE + NAK_SIZE / 2));
+      ctx.save();
+      ctx.translate(cx + nakMid * Math.cos(midAngle), cy + nakMid * Math.sin(midAngle));
+      ctx.rotate(midAngle + Math.PI / 2);
+      ctx.font = `500 ${Math.round(size * 0.015)}px ${FONT}`;
+      ctx.fillStyle = "rgba(80,55,25,0.65)";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(NAKSHATRAS[i].abbr, 0, 0);
+      ctx.restore();
+    }
+
+    // Nakshatra ring borders
+    [nakOuter, nakInner].forEach(r => {
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(100,78,38,0.22)"; ctx.lineWidth = 0.8; ctx.stroke();
     });
 
     // ── Zodiac division lines extended to centre (faint) ───
@@ -379,8 +474,9 @@ function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
         </thead>
         <tbody>
           {PLANETS.map((p, i) => {
-            const s1 = signAndDeg(d1Pos[p.name] ?? 0);
-            const s9 = signAndDeg(d9Pos[p.name] ?? 0);
+            const s1   = signAndDeg(d1Pos[p.name] ?? 0);
+            const s9   = signAndDeg(d9Pos[p.name] ?? 0);
+            const nak1 = nakshatraOf(d1Pos[p.name] ?? 0);
             const isRetro = retrogrades && retrogrades.has(p.name);
             return (
               <tr key={p.name} style={{ background: i % 2 === 0 ? "rgba(200,184,144,0.09)" : "transparent",
@@ -395,16 +491,25 @@ function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
                   <span style={{ color: "#3A2A10" }}>{s1.sign.name}</span>
                 </td>
                 <td style={{ ...td, fontFamily: "monospace", color: "#5A4020" }}>
-                  {s1.deg}° {String(s1.min).padStart(2,"0")}′
-                  <span style={{ color: "#A08050", fontSize: 11, marginLeft: 6 }}>({s1.degInSign.toFixed(2)}°)</span>
+                  {s1.deg}°{String(s1.min).padStart(2,"0")}′
+                </td>
+                <td style={{ ...td, color: "#3A2A10" }}>
+                  <span style={{ fontWeight: 600 }}>{nak1.name}</span>
+                  <span style={{ color: "#8A6A30", fontSize: 11, marginLeft: 5 }}>({nak1.lord})</span>
+                </td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <span style={{
+                    display: "inline-block", width: 22, height: 22, lineHeight: "22px",
+                    borderRadius: "50%", background: "#7A6040", color: "#FFF7E6",
+                    fontSize: 11, fontWeight: 700, textAlign: "center",
+                  }}>{nak1.pada}</span>
                 </td>
                 <td style={{ ...td }}>
                   <span style={{ color: s9.sign.hue, marginRight: 5, fontSize: 15 }}>{s9.sign.symbol}</span>
                   <span style={{ color: "#3A2A10" }}>{s9.sign.name}</span>
                 </td>
                 <td style={{ ...td, fontFamily: "monospace", color: "#5A4020" }}>
-                  {s9.deg}° {String(s9.min).padStart(2,"0")}′
-                  <span style={{ color: "#A08050", fontSize: 11, marginLeft: 6 }}>({s9.degInSign.toFixed(2)}°)</span>
+                  {s9.deg}°{String(s9.min).padStart(2,"0")}′
                 </td>
               </tr>
             );
