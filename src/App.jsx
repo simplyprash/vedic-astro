@@ -12,10 +12,8 @@ function julianDay(date) {
 }
 
 function norm360(x) { return ((x % 360) + 360) % 360; }
-
 function lahiriAyanamsa(T) { return 23.85 + 0.0137 * T * 100; }
 
-// Returns { name: longitude } sidereal degrees
 function computePlanetaryPositions(date) {
   const jd = julianDay(date);
   const T  = (jd - 2451545.0) / 36525;
@@ -36,82 +34,86 @@ function computePlanetaryPositions(date) {
   return sid;
 }
 
-// Check retrograde by comparing position 24h apart
-// Returns set of retrograde planet names
 function computeRetrogrades(date) {
   const yesterday = new Date(date.getTime() - 86400000);
   const pos0 = computePlanetaryPositions(yesterday);
   const pos1 = computePlanetaryPositions(date);
   const retro = new Set();
-  // A planet is retrograde if its longitude decreased (accounting for 0/360 wrap)
-  const retroCandidates = ["Mercury","Venus","Mars","Jupiter","Saturn"];
-  for (const p of retroCandidates) {
+  for (const p of ["Mercury","Venus","Mars","Jupiter","Saturn"]) {
     let diff = pos1[p] - pos0[p];
-    // Normalize for wrap
     if (diff > 180) diff -= 360;
     if (diff < -180) diff += 360;
     if (diff < 0) retro.add(p);
   }
-  // Rahu/Ketu always retrograde
   retro.add("Rahu"); retro.add("Ketu");
   return retro;
 }
 
+// Fixed toNavamsa: returns actual sidereal longitude within the navamsa sign,
+// preserving the fractional position within each 3°20' segment.
 function toNavamsa(sidLong) {
-  const sign = Math.floor(sidLong / 30);
-  const pos  = sidLong % 30;
-  const navPart = Math.floor(pos / (30 / 9));
-  const starts = [0, 9, 6, 3];
+  const rasi      = Math.floor(sidLong / 30);           // 0–11 rasi
+  const posInRasi = sidLong % 30;                       // 0–30° within rasi
+  const segSize   = 30 / 9;                             // 3.3333°
+  const navPart   = Math.floor(posInRasi / segSize);    // 0–8 which navamsa segment
+  const posInSeg  = posInRasi % segSize;                // position within segment
+  // Navamsa start sign depends on rasi element
+  const starts   = [0, 9, 6, 3]; // fire→Aries, earth→Cap, air→Lib, water→Can
   const elements = [0,1,2,3,0,1,2,3,0,1,2,3];
-  const startSign = (starts[elements[sign]] + navPart) % 12;
-  return norm360(startSign * 30 + 15);
+  const navSign  = (starts[elements[rasi]] + navPart) % 12;
+  // Scale posInSeg (0–3.333°) to full sign width (0–30°)
+  const posInNavSign = (posInSeg / segSize) * 30;
+  return norm360(navSign * 30 + posInNavSign);
 }
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
 
+const FONT = "'Inter', 'Segoe UI', system-ui, sans-serif";
+
 const ZODIAC_SIGNS = [
-  { name: "Aries",       symbol: "♈", element: "fire",  hue: "#C0392B" },
-  { name: "Taurus",      symbol: "♉", element: "earth", hue: "#27AE60" },
-  { name: "Gemini",      symbol: "♊", element: "air",   hue: "#D4AC0D" },
-  { name: "Cancer",      symbol: "♋", element: "water", hue: "#2980B9" },
-  { name: "Leo",         symbol: "♌", element: "fire",  hue: "#C0392B" },
-  { name: "Virgo",       symbol: "♍", element: "earth", hue: "#27AE60" },
-  { name: "Libra",       symbol: "♎", element: "air",   hue: "#D4AC0D" },
-  { name: "Scorpio",     symbol: "♏", element: "water", hue: "#2980B9" },
-  { name: "Sagittarius", symbol: "♐", element: "fire",  hue: "#C0392B" },
-  { name: "Capricorn",   symbol: "♑", element: "earth", hue: "#27AE60" },
-  { name: "Aquarius",    symbol: "♒", element: "air",   hue: "#D4AC0D" },
-  { name: "Pisces",      symbol: "♓", element: "water", hue: "#2980B9" },
+  { name: "Aries",       abbr: "Ar", symbol: "♈", element: "fire",  hue: "#C0392B" },
+  { name: "Taurus",      abbr: "Ta", symbol: "♉", element: "earth", hue: "#27AE60" },
+  { name: "Gemini",      abbr: "Ge", symbol: "♊", element: "air",   hue: "#C49A00" },
+  { name: "Cancer",      abbr: "Ca", symbol: "♋", element: "water", hue: "#2980B9" },
+  { name: "Leo",         abbr: "Le", symbol: "♌", element: "fire",  hue: "#C0392B" },
+  { name: "Virgo",       abbr: "Vi", symbol: "♍", element: "earth", hue: "#27AE60" },
+  { name: "Libra",       abbr: "Li", symbol: "♎", element: "air",   hue: "#C49A00" },
+  { name: "Scorpio",     abbr: "Sc", symbol: "♏", element: "water", hue: "#2980B9" },
+  { name: "Sagittarius", abbr: "Sg", symbol: "♐", element: "fire",  hue: "#C0392B" },
+  { name: "Capricorn",   abbr: "Cp", symbol: "♑", element: "earth", hue: "#27AE60" },
+  { name: "Aquarius",    abbr: "Aq", symbol: "♒", element: "air",   hue: "#C49A00" },
+  { name: "Pisces",      abbr: "Pi", symbol: "♓", element: "water", hue: "#2980B9" },
 ];
 
 const ELEMENT_BG = {
-  fire:  "rgba(192,57,43,0.07)",
-  earth: "rgba(39,174,96,0.07)",
-  air:   "rgba(212,172,13,0.07)",
-  water: "rgba(41,128,185,0.07)",
+  fire:  "rgba(192,57,43,0.06)",
+  earth: "rgba(39,174,96,0.06)",
+  air:   "rgba(196,154,0,0.06)",
+  water: "rgba(41,128,185,0.06)",
 };
 
+// Distinct orbit radius per planet — evenly spaced across the chart interior
 const PLANETS = [
-  { name: "Moon",    short: "Mo", symbol: "☽", color: "#5578AA", orbitFrac: 0.18 },
-  { name: "Mercury", short: "Me", symbol: "☿", color: "#2A8A82", orbitFrac: 0.26 },
-  { name: "Venus",   short: "Ve", symbol: "♀", color: "#A84040", orbitFrac: 0.34 },
-  { name: "Sun",     short: "Su", symbol: "☉", color: "#B86A00", orbitFrac: 0.42 },
-  { name: "Mars",    short: "Ma", symbol: "♂", color: "#902020", orbitFrac: 0.50 },
-  { name: "Jupiter", short: "Ju", symbol: "♃", color: "#604898", orbitFrac: 0.58 },
-  { name: "Saturn",  short: "Sa", symbol: "♄", color: "#486070", orbitFrac: 0.66 },
-  { name: "Rahu",    short: "Ra", symbol: "☊", color: "#286070", orbitFrac: 0.74 },
-  { name: "Ketu",    short: "Ke", symbol: "☋", color: "#784060", orbitFrac: 0.74 },
+  { name: "Moon",    short: "Mo", symbol: "☽", color: "#3A6AAA", orbitFrac: 0.13 },
+  { name: "Mercury", short: "Me", symbol: "☿", color: "#1A7A72", orbitFrac: 0.22 },
+  { name: "Venus",   short: "Ve", symbol: "♀", color: "#A03030", orbitFrac: 0.31 },
+  { name: "Sun",     short: "Su", symbol: "☉", color: "#A05800", orbitFrac: 0.40 },
+  { name: "Mars",    short: "Ma", symbol: "♂", color: "#801818", orbitFrac: 0.49 },
+  { name: "Jupiter", short: "Ju", symbol: "♃", color: "#503888", orbitFrac: 0.58 },
+  { name: "Saturn",  short: "Sa", symbol: "♄", color: "#385060", orbitFrac: 0.67 },
+  { name: "Rahu",    short: "Ra", symbol: "☊", color: "#186060", orbitFrac: 0.76 },
+  { name: "Ketu",    short: "Ke", symbol: "☋", color: "#683050", orbitFrac: 0.76 },
 ];
 
 function degToRad(d) { return d * Math.PI / 180; }
 
-// Returns sign (0-11), degrees within sign (0-30), minutes
 function signAndDeg(lon) {
-  const si  = Math.floor(lon / 30) % 12;
-  const dd  = lon % 30;
-  const deg = Math.floor(dd);
-  const min = Math.floor((dd - deg) * 60);
-  return { sign: ZODIAC_SIGNS[si], signIdx: si, degInSign: dd, deg, min };
+  const si      = Math.floor(lon / 30) % 12;
+  const dd      = lon % 30;
+  const deg     = Math.floor(dd);
+  const min     = Math.floor((dd - deg) * 60);
+  const sec     = Math.floor(((dd - deg) * 60 - min) * 60);
+  return { sign: ZODIAC_SIGNS[si], signIdx: si, degInSign: dd, deg, min, sec };
 }
 
 // ─── Chart Canvas ─────────────────────────────────────────────────────────────
@@ -131,159 +133,160 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
     ctx.scale(dpr, dpr);
 
     const cx = size / 2, cy = size / 2;
-    const R  = size / 2 - 14;
+    const R  = size / 2 - 10;
 
-    // Parchment background
-    const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R + 14);
-    bgGrad.addColorStop(0, "#FDFAF4");
-    bgGrad.addColorStop(1, "#EDE8DA");
-    ctx.beginPath(); ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
+    // Background
+    const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R + 10);
+    bgGrad.addColorStop(0, "#FEFCF7");
+    bgGrad.addColorStop(1, "#EEE8D8");
+    ctx.beginPath(); ctx.arc(cx, cy, R + 10, 0, Math.PI * 2);
     ctx.fillStyle = bgGrad; ctx.fill();
-    ctx.beginPath(); ctx.arc(cx, cy, R + 12, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(80,60,30,0.15)"; ctx.lineWidth = 2; ctx.stroke();
 
-    const zodOuter = R * 0.97;
-    const zodInner = R * 0.75;
+    // Outer border ring
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(100,80,40,0.25)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // zodInner is now the outer edge of the zodiac label ring
+    // We remove the big symbol band — just keep a thin label ring
+    const zodOuter = R * 0.99;
+    const zodInner = R * 0.84;  // thinner band — just enough for sign abbr
     const zodMid   = (zodOuter + zodInner) / 2;
 
-    // ── Zodiac sectors ─────────────────────────────────────
+    // ── Zodiac band: coloured sectors with abbrev ─────────
     for (let i = 0; i < 12; i++) {
       const a0   = degToRad(i * 30 - 90);
       const a1   = degToRad((i + 1) * 30 - 90);
       const sign = ZODIAC_SIGNS[i];
 
+      // Filled sector
       ctx.beginPath(); ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, zodOuter, a0, a1); ctx.closePath();
       ctx.fillStyle = ELEMENT_BG[sign.element]; ctx.fill();
-      ctx.strokeStyle = "rgba(120,100,60,0.15)"; ctx.lineWidth = 0.5; ctx.stroke();
 
-      // Spoke
+      // Spoke at sector start
       ctx.beginPath();
       ctx.moveTo(cx + zodInner * Math.cos(a0), cy + zodInner * Math.sin(a0));
       ctx.lineTo(cx + zodOuter * Math.cos(a0), cy + zodOuter * Math.sin(a0));
-      ctx.strokeStyle = "rgba(120,100,60,0.28)"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = "rgba(100,80,40,0.22)"; ctx.lineWidth = 1; ctx.stroke();
 
-      // Degree tick marks within each sign (every 10°)
+      // 10° tick marks inside the band
       for (let d = 10; d < 30; d += 10) {
         const ta = degToRad(i * 30 + d - 90);
-        const t0 = zodInner, t1 = zodInner + (zodOuter - zodInner) * 0.25;
+        const t0 = zodInner, t1 = zodInner + (zodOuter - zodInner) * 0.3;
         ctx.beginPath();
         ctx.moveTo(cx + t0 * Math.cos(ta), cy + t0 * Math.sin(ta));
         ctx.lineTo(cx + t1 * Math.cos(ta), cy + t1 * Math.sin(ta));
-        ctx.strokeStyle = "rgba(120,100,60,0.2)"; ctx.lineWidth = 0.8; ctx.stroke();
+        ctx.strokeStyle = "rgba(100,80,40,0.18)"; ctx.lineWidth = 0.8; ctx.stroke();
       }
 
-      // Zodiac symbol
+      // Sign abbreviation + symbol — compact, in the thin band
       const mid = degToRad(i * 30 + 15 - 90);
-      ctx.font = `bold ${Math.round(size * 0.042)}px serif`;
-      ctx.fillStyle = sign.hue + "CC";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(sign.symbol, cx + zodMid * Math.cos(mid), cy + zodMid * Math.sin(mid));
-
-      // Sign name outside
+      const sx  = cx + zodMid * Math.cos(mid);
+      const sy  = cy + zodMid * Math.sin(mid);
       ctx.save();
-      const nr = zodOuter * 1.055;
-      ctx.translate(cx + nr * Math.cos(mid), cy + nr * Math.sin(mid));
+      ctx.translate(sx, sy);
       ctx.rotate(mid + Math.PI / 2);
-      ctx.font = `${Math.round(size * 0.019)}px Georgia, serif`;
-      ctx.fillStyle = "rgba(80,60,30,0.45)";
-      ctx.fillText(sign.name, 0, 0);
+      // Symbol
+      ctx.font = `bold ${Math.round(size * 0.032)}px serif`;
+      ctx.fillStyle = sign.hue;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(sign.symbol, 0, -size * 0.012);
+      // Abbreviation below symbol
+      ctx.font = `600 ${Math.round(size * 0.020)}px ${FONT}`;
+      ctx.fillStyle = sign.hue + "BB";
+      ctx.fillText(sign.abbr, 0, size * 0.016);
       ctx.restore();
     }
 
-    // Ring borders
+    // Band borders
     [zodOuter, zodInner].forEach(r => {
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(120,100,60,0.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = "rgba(100,80,40,0.30)"; ctx.lineWidth = 1.2; ctx.stroke();
     });
 
-    // ── Orbit halos (very light filled circles) ───────────
+    // ── Orbit halos (light filled band per orbit) ─────────
     const usedFracs = [...new Set(PLANETS.map(p => p.orbitFrac))];
     usedFracs.forEach(f => {
       const r = f * zodInner;
-      // Light filled band
-      ctx.beginPath(); ctx.arc(cx, cy, r + size * 0.018, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(160,130,70,0.04)"; ctx.fill();
-      // Dashed orbit ring
+      const bw = size * 0.017; // band half-width
+      // Subtle filled ring
+      ctx.beginPath(); ctx.arc(cx, cy, r + bw, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(140,110,60,0.04)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, r - bw, 0, Math.PI * 2);
+      ctx.fillStyle = "#FEFCF7"; ctx.fill(); // clear inner
+      // Dashed circle line
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.setLineDash([3, 8]);
-      ctx.strokeStyle = "rgba(120,100,60,0.18)"; ctx.lineWidth = 1;
+      ctx.setLineDash([3, 9]);
+      ctx.strokeStyle = "rgba(100,80,40,0.14)"; ctx.lineWidth = 0.9;
       ctx.stroke(); ctx.setLineDash([]);
     });
 
     // ── Planets ───────────────────────────────────────────
     PLANETS.forEach((p) => {
-      const lon   = positions[p.name] ?? 0;
-      const angle = degToRad(lon - 90);
+      const lon    = positions[p.name] ?? 0;
+      const angle  = degToRad(lon - 90);
       const orbitR = p.orbitFrac * zodInner;
-      const px = cx + orbitR * Math.cos(angle);
-      const py = cy + orbitR * Math.sin(angle);
+      const px     = cx + orbitR * Math.cos(angle);
+      const py     = cy + orbitR * Math.sin(angle);
       const isRetro = retrogrades && retrogrades.has(p.name);
 
-      // Radial line Earth→planet (very faint)
+      // Faint line from Earth to planet
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, py);
-      ctx.strokeStyle = p.color + "28"; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.strokeStyle = p.color + "22"; ctx.lineWidth = 0.8; ctx.stroke();
 
-      // Glow halo behind planet
-      const glowR = size * 0.046;
-      const glow = ctx.createRadialGradient(px, py, 0, px, py, glowR);
-      glow.addColorStop(0, p.color + "55");
-      glow.addColorStop(0.5, p.color + "22");
-      glow.addColorStop(1, p.color + "00");
-      ctx.beginPath(); ctx.arc(px, py, glowR, 0, Math.PI * 2);
+      // Soft glow
+      const gR = size * 0.040;
+      const glow = ctx.createRadialGradient(px, py, 0, px, py, gR);
+      glow.addColorStop(0, p.color + "50");
+      glow.addColorStop(0.5, p.color + "18");
+      glow.addColorStop(1,   p.color + "00");
+      ctx.beginPath(); ctx.arc(px, py, gR, 0, Math.PI * 2);
       ctx.fillStyle = glow; ctx.fill();
 
       // Planet dot
-      const dotR = size * 0.020;
+      const dotR = size * 0.019;
       ctx.beginPath(); ctx.arc(px, py, dotR, 0, Math.PI * 2);
       ctx.fillStyle = p.color; ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.80)"; ctx.lineWidth = 1.2; ctx.stroke();
 
-      // Compute label position — push outward from Earth for clarity
-      const labelDist = dotR + size * 0.016;
-      // Angle for label: slightly above the planet away from center
-      const lx = px + labelDist * Math.cos(angle);
-      const ly = py + labelDist * Math.sin(angle);
+      // Label outward from Earth along the radial line
+      const labelPush = dotR + size * 0.024;
+      const lx = px + labelPush * Math.cos(angle);
+      const ly = py + labelPush * Math.sin(angle);
 
-      // Short name
-      ctx.font = `bold ${Math.round(size * 0.026)}px Georgia, serif`;
+      // Short name (+ retrograde symbol if applicable)
+      ctx.font = `700 ${Math.round(size * 0.025)}px ${FONT}`;
       ctx.fillStyle = p.color;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      const label = isRetro ? p.short + " ℞" : p.short;
-      ctx.fillText(label, lx, ly - size * 0.022);
+      const nameLabel = isRetro ? `${p.short} ℞` : p.short;
+      ctx.fillText(nameLabel, lx, ly - size * 0.008);
 
-      // Planet symbol just above the dot
-      ctx.font = `${Math.round(size * 0.024)}px serif`;
-      ctx.fillStyle = p.color + "CC";
-      ctx.fillText(p.symbol, px, py - dotR - size * 0.014);
-
-      // Degrees within sign — draw as tiny arc annotation at orbit edge
-      // Small degree label inside the zodiac band at planet's angle
-      const { deg, min, degInSign } = signAndDeg(lon);
-      const degLabel = `${deg}°${min}'`;
-      const degR = zodInner + (zodOuter - zodInner) * 0.5;
-      const degX = cx + degR * Math.cos(angle);
-      const degY = cy + degR * Math.sin(angle);
+      // Degree within sign — rotated along radial, near zodiac band
+      const { deg, min } = signAndDeg(lon);
+      const degLabel = `${deg}°${String(min).padStart(2,"0")}′`;
+      const degR = zodInner * 0.915;
+      const dgx  = cx + degR * Math.cos(angle);
+      const dgy  = cy + degR * Math.sin(angle);
       ctx.save();
-      ctx.translate(degX, degY);
+      ctx.translate(dgx, dgy);
       ctx.rotate(angle + Math.PI / 2);
-      ctx.font = `${Math.round(size * 0.018)}px Georgia, serif`;
+      ctx.font = `500 ${Math.round(size * 0.017)}px ${FONT}`;
       ctx.fillStyle = p.color + "CC";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(degLabel, 0, 0);
       ctx.restore();
     });
 
-    // ── Earth at centre ────────────────────────────────────
-    const er = size * 0.052;
+    // ── Earth ─────────────────────────────────────────────
+    const er = size * 0.050;
     const eg = ctx.createRadialGradient(cx - er * 0.3, cy - er * 0.3, 0, cx, cy, er);
     eg.addColorStop(0, "#6BAED6");
     eg.addColorStop(0.5, "#2166AC");
     eg.addColorStop(1, "#084594");
     ctx.beginPath(); ctx.arc(cx, cy, er, 0, Math.PI * 2);
     ctx.fillStyle = eg; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.font = `${Math.round(size * 0.026)}px serif`;
+    ctx.strokeStyle = "rgba(255,255,255,0.65)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.font = `${Math.round(size * 0.024)}px serif`;
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("🜨", cx, cy);
@@ -296,18 +299,22 @@ function VedicChartCanvas({ positions, retrogrades, size }) {
 // ─── Planet Table ─────────────────────────────────────────────────────────────
 
 function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
+  const th = { padding: "8px 12px", textAlign: "left", color: "#6B5A3A",
+    fontWeight: 600, fontSize: 11, letterSpacing: 1, textTransform: "uppercase",
+    borderBottom: "2px solid #D8CCAA", fontFamily: FONT };
+  const td = { padding: "8px 12px", fontFamily: FONT, fontSize: 13 };
+
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, fontFamily: "Georgia, serif" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ borderBottom: "2px solid #C8B890" }}>
-            {["Planet","","D1 Sign","Deg in Sign","D9 Sign","Deg in Sign"].map((h, i) => (
-              <th key={i} style={{
-                padding: "7px 10px", textAlign: i === 1 ? "center" : "left",
-                color: "#7A6040", fontWeight: "normal", fontSize: 11,
-                letterSpacing: 1, textTransform: "uppercase",
-              }}>{h}</th>
-            ))}
+          <tr>
+            <th style={th}>Planet</th>
+            <th style={{ ...th, textAlign: "center" }}></th>
+            <th style={th}>D1 Sign</th>
+            <th style={th}>D1 Deg (in sign)</th>
+            <th style={th}>D9 Sign</th>
+            <th style={th}>D9 Deg (in sign)</th>
           </tr>
         </thead>
         <tbody>
@@ -316,30 +323,28 @@ function PlanetTable({ d1Pos, d9Pos, retrogrades }) {
             const s9 = signAndDeg(d9Pos[p.name] ?? 0);
             const isRetro = retrogrades && retrogrades.has(p.name);
             return (
-              <tr key={p.name} style={{
-                background: i % 2 === 0 ? "rgba(200,184,144,0.08)" : "transparent",
-                borderBottom: "1px solid rgba(200,184,144,0.2)",
-              }}>
-                <td style={{ padding: "7px 10px", color: "#3A2A10" }}>
-                  <span style={{ fontWeight: "bold" }}>{p.name}</span>
-                  {isRetro && <span style={{ color: "#A03030", fontSize: 11, marginLeft: 5 }}>℞</span>}
+              <tr key={p.name} style={{ background: i % 2 === 0 ? "rgba(200,184,144,0.09)" : "transparent",
+                borderBottom: "1px solid rgba(200,184,144,0.25)" }}>
+                <td style={{ ...td, fontWeight: 700, color: "#2A1E0A" }}>
+                  {p.name}
+                  {isRetro && <span style={{ color: "#991111", fontSize: 11, marginLeft: 5 }}>℞</span>}
                 </td>
-                <td style={{ padding: "7px 4px", textAlign: "center", fontSize: 17, color: p.color }}>{p.symbol}</td>
-                <td style={{ padding: "7px 10px" }}>
-                  <span style={{ color: s1.sign.hue, marginRight: 4 }}>{s1.sign.symbol}</span>
-                  <span style={{ color: "#5A4030" }}>{s1.sign.name}</span>
+                <td style={{ ...td, textAlign: "center", fontSize: 16, color: p.color }}>{p.symbol}</td>
+                <td style={{ ...td }}>
+                  <span style={{ color: s1.sign.hue, marginRight: 5, fontSize: 15 }}>{s1.sign.symbol}</span>
+                  <span style={{ color: "#3A2A10" }}>{s1.sign.name}</span>
                 </td>
-                <td style={{ padding: "7px 10px", color: "#8A7050", fontFamily: "monospace", fontSize: 12 }}>
-                  {s1.deg}° {s1.min}′ &nbsp;
-                  <span style={{ color: "#B0905A", fontSize: 11 }}>({s1.degInSign.toFixed(2)}°)</span>
+                <td style={{ ...td, fontFamily: "monospace", color: "#5A4020" }}>
+                  {s1.deg}° {String(s1.min).padStart(2,"0")}′
+                  <span style={{ color: "#A08050", fontSize: 11, marginLeft: 6 }}>({s1.degInSign.toFixed(2)}°)</span>
                 </td>
-                <td style={{ padding: "7px 10px" }}>
-                  <span style={{ color: s9.sign.hue, marginRight: 4 }}>{s9.sign.symbol}</span>
-                  <span style={{ color: "#5A4030" }}>{s9.sign.name}</span>
+                <td style={{ ...td }}>
+                  <span style={{ color: s9.sign.hue, marginRight: 5, fontSize: 15 }}>{s9.sign.symbol}</span>
+                  <span style={{ color: "#3A2A10" }}>{s9.sign.name}</span>
                 </td>
-                <td style={{ padding: "7px 10px", color: "#8A7050", fontFamily: "monospace", fontSize: 12 }}>
-                  {s9.deg}° {s9.min}′ &nbsp;
-                  <span style={{ color: "#B0905A", fontSize: 11 }}>({s9.degInSign.toFixed(2)}°)</span>
+                <td style={{ ...td, fontFamily: "monospace", color: "#5A4020" }}>
+                  {s9.deg}° {String(s9.min).padStart(2,"0")}′
+                  <span style={{ color: "#A08050", fontSize: 11, marginLeft: 6 }}>({s9.degInSign.toFixed(2)}°)</span>
                 </td>
               </tr>
             );
@@ -366,18 +371,18 @@ export default function VedicAstrology() {
   };
 
   const [baseDate,    setBaseDate]    = useState(toLocal(now));
-  const [sliderVal,   setSliderVal]   = useState(0);       // hours offset
+  const [sliderVal,   setSliderVal]   = useState(0);
   const [rangeDays,   setRangeDays]   = useState(90);
   const [activeChart, setActiveChart] = useState("D1");
   const [playing,     setPlaying]     = useState(false);
-  const playRef = useRef(null);
+  const playRef      = useRef(null);
   const containerRef = useRef(null);
-  const [chartSize, setChartSize] = useState(400);
+  const [chartSize, setChartSize]     = useState(420);
 
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
       const w = entries[0].contentRect.width;
-      setChartSize(Math.min(460, Math.max(240, w - 24)));
+      setChartSize(Math.min(480, Math.max(260, w - 24)));
     });
     if (containerRef.current) obs.observe(containerRef.current);
     return () => obs.disconnect();
@@ -391,14 +396,13 @@ export default function VedicAstrology() {
     return d;
   }, [baseDate, sliderVal]);
 
-  const effDate = effectiveDate();
-  const d1Pos   = computePlanetaryPositions(effDate);
-  const retros  = computeRetrogrades(effDate);
-  const d9Pos   = {};
+  const effDate    = effectiveDate();
+  const d1Pos      = computePlanetaryPositions(effDate);
+  const retros     = computeRetrogrades(effDate);
+  const d9Pos      = {};
   for (const k in d1Pos) d9Pos[k] = toNavamsa(d1Pos[k]);
   const displayPos = activeChart === "D1" ? d1Pos : d9Pos;
 
-  // Play: step 12 hours per tick
   useEffect(() => {
     if (playing) {
       playRef.current = setInterval(() => {
@@ -412,7 +416,6 @@ export default function VedicAstrology() {
     return () => clearInterval(playRef.current);
   }, [playing, rangeHours]);
 
-  // Clamp slider when range changes
   useEffect(() => {
     setSliderVal(v => Math.max(-rangeHours, Math.min(rangeHours, v)));
   }, [rangeHours]);
@@ -421,123 +424,123 @@ export default function VedicAstrology() {
     if (hrs === 0) return "Base time";
     const sign = hrs < 0 ? "−" : "+";
     const abs  = Math.abs(hrs);
-    const d    = Math.floor(abs / 24);
-    const h    = abs % 24;
+    const d    = Math.floor(abs / 24), h = abs % 24;
     return d > 0 ? `${sign}${d}d ${h}h` : `${sign}${h}h`;
   };
 
   const effStr = effDate.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
-  const cardStyle = {
+  const card = {
     background: "#FDFAF4", border: "1px solid #D8CCAA", borderRadius: 14,
     padding: "16px 20px", marginBottom: 14,
     boxShadow: "0 2px 8px rgba(120,90,40,0.07)",
   };
-  const btnBase = {
-    padding: "7px 16px", borderRadius: 7, cursor: "pointer",
-    fontFamily: "Georgia, serif", fontSize: 12,
-    border: "1.5px solid #C8B890", transition: "all 0.15s",
+  const label = {
+    fontSize: 11, letterSpacing: 1.5, color: "#8A6A30",
+    textTransform: "uppercase", fontWeight: 600, fontFamily: FONT, marginBottom: 10,
   };
-  const btnActive = { ...btnBase, background: "#7A6040", color: "#FFF7E6", borderColor: "#7A6040" };
-  const btnGhost  = { ...btnBase, background: "transparent", color: "#7A6040" };
+  const btnBase = {
+    padding: "7px 16px", borderRadius: 7, cursor: "pointer", fontFamily: FONT,
+    fontSize: 12, fontWeight: 500, border: "1.5px solid #C8B890", transition: "all 0.15s",
+  };
+  const btnOn  = { ...btnBase, background: "#6A5030", color: "#FFF7E6", borderColor: "#6A5030" };
+  const btnOff = { ...btnBase, background: "transparent", color: "#6A5030" };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(160deg, #F5F0E4 0%, #EDE4CC 100%)",
-      fontFamily: "Georgia, 'Times New Roman', serif",
-      color: "#3A2E18", padding: "20px 12px 48px",
-    }}>
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#F7F2E6 0%,#EDE4CC 100%)",
+      fontFamily: FONT, color: "#2A1E0A", padding: "20px 12px 48px" }}>
+      <div style={{ maxWidth: 800, margin: "0 auto" }}>
 
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 10, letterSpacing: 5, color: "#A08040", textTransform: "uppercase", marginBottom: 4 }}>
+          <div style={{ fontSize: 10, letterSpacing: 5, color: "#9A7A30", textTransform: "uppercase",
+            marginBottom: 6, fontWeight: 600 }}>
             Jyotish · Vedic Astrology
           </div>
-          <h1 style={{ margin: 0, fontWeight: "normal", letterSpacing: 2, fontSize: "clamp(20px,5vw,32px)", color: "#4A3010" }}>
+          <h1 style={{ margin: 0, fontWeight: 700, letterSpacing: 0.5,
+            fontSize: "clamp(22px,5vw,34px)", color: "#3A2808" }}>
             Geocentric Chart Viewer
           </h1>
-          <div style={{ color: "#A09060", fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: "#9A8050", fontSize: 13, marginTop: 5, fontWeight: 400 }}>
             Lahiri Ayanamsa · Sidereal · Earth as Centre
           </div>
         </div>
 
         {/* Datetime */}
-        <div style={cardStyle}>
-          <div style={{ fontSize: 11, letterSpacing: 2, color: "#A08040", marginBottom: 10, textTransform: "uppercase" }}>
-            Birth / Reference Date & Time
-          </div>
+        <div style={card}>
+          <div style={label}>Birth / Reference Date & Time</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <input type="datetime-local" value={baseDate}
               onChange={e => { setBaseDate(e.target.value); setSliderVal(0); }}
-              style={{
-                padding: "8px 12px", borderRadius: 8, border: "1.5px solid #C8B890",
-                background: "#FFF8EE", color: "#4A3010", fontFamily: "Georgia, serif",
-                fontSize: 13, outline: "none", flex: 1, minWidth: 200,
-              }}
+              style={{ padding: "9px 12px", borderRadius: 8, border: "1.5px solid #C8B890",
+                background: "#FFF8EE", color: "#3A2808", fontFamily: FONT,
+                fontSize: 14, outline: "none", flex: 1, minWidth: 200 }}
             />
-            <button onClick={() => { setBaseDate(toLocal(new Date())); setSliderVal(0); }} style={{ ...btnGhost, padding: "8px 14px" }}>
+            <button onClick={() => { setBaseDate(toLocal(new Date())); setSliderVal(0); }} style={btnOff}>
               Now
             </button>
           </div>
         </div>
 
-        {/* Time Slider */}
-        <div style={cardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontSize: 11, letterSpacing: 2, color: "#A08040", textTransform: "uppercase" }}>
-              Time Slider
-            </div>
-            <div style={{ fontSize: 12, color: "#7A6040", fontStyle: "italic" }}>
-              {effStr} &nbsp;·&nbsp; <span style={{ color: sliderVal !== 0 ? "#8A3010" : "#7A6040" }}>{fmtOffset(sliderVal)}</span>
+        {/* Slider */}
+        <div style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+            <div style={label}>Time Slider</div>
+            <div style={{ fontSize: 13, color: "#5A4020", fontWeight: 500 }}>
+              {effStr}
+              {sliderVal !== 0 && (
+                <span style={{ color: "#8A2010", marginLeft: 8 }}>{fmtOffset(sliderVal)}</span>
+              )}
             </div>
           </div>
 
-          {/* Range selector */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <span style={{ fontSize: 11, color: "#A08040", alignSelf: "center", marginRight: 4 }}>Range:</span>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#8A6A30", fontWeight: 600, marginRight: 4 }}>Range:</span>
             {RANGE_OPTIONS.map(opt => (
               <button key={opt.days} onClick={() => setRangeDays(opt.days)}
-                style={rangeDays === opt.days ? { ...btnActive, padding: "4px 12px", fontSize: 11 } : { ...btnGhost, padding: "4px 12px", fontSize: 11 }}>
+                style={rangeDays === opt.days
+                  ? { ...btnOn,  padding: "4px 12px", fontSize: 11 }
+                  : { ...btnOff, padding: "4px 12px", fontSize: 11 }}>
                 {opt.label}
               </button>
             ))}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#A08060", whiteSpace: "nowrap" }}>−{rangeDays}d</span>
-            <input type="range" min={-rangeHours} max={rangeHours} step={6}
-              value={sliderVal}
+            <span style={{ fontSize: 11, color: "#9A8050", whiteSpace: "nowrap" }}>−{rangeDays}d</span>
+            <input type="range" min={-rangeHours} max={rangeHours} step={6} value={sliderVal}
               onChange={e => setSliderVal(Number(e.target.value))}
-              style={{ flex: 1, accentColor: "#8A6030" }}
-            />
-            <span style={{ fontSize: 11, color: "#A08060", whiteSpace: "nowrap" }}>+{rangeDays}d</span>
+              style={{ flex: 1, accentColor: "#7A5020" }} />
+            <span style={{ fontSize: 11, color: "#9A8050", whiteSpace: "nowrap" }}>+{rangeDays}d</span>
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button onClick={() => { setSliderVal(0); setPlaying(false); }} style={{ ...btnGhost, fontSize: 11, padding: "5px 12px" }}>
+            <button onClick={() => { setSliderVal(0); setPlaying(false); }} style={{ ...btnOff, padding: "5px 12px", fontSize: 11 }}>
               Reset
             </button>
             <button onClick={() => setPlaying(p => !p)}
-              style={playing ? { ...btnActive, fontSize: 11, padding: "5px 14px" } : { ...btnGhost, fontSize: 11, padding: "5px 14px" }}>
-              {playing ? "⏸ Pause" : "▶ Play forward"}
+              style={playing
+                ? { ...btnOn,  padding: "5px 16px", fontSize: 12 }
+                : { ...btnOff, padding: "5px 16px", fontSize: 12 }}>
+              {playing ? "⏸ Pause" : "▶ Play"}
             </button>
           </div>
         </div>
 
-        {/* D1/D9 Toggle */}
+        {/* D1 / D9 toggle */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
           <div style={{ border: "1.5px solid #C8B890", borderRadius: 10, overflow: "hidden", display: "inline-flex" }}>
             {["D1","D9"].map(c => (
               <button key={c} onClick={() => setActiveChart(c)} style={{
-                padding: "10px 40px", background: activeChart === c ? "#7A6040" : "transparent",
+                padding: "10px 44px",
+                background: activeChart === c ? "#6A5030" : "transparent",
                 border: "none", cursor: "pointer",
-                color: activeChart === c ? "#FFF7E6" : "#7A6040",
-                fontFamily: "Georgia, serif", fontSize: 14, letterSpacing: 2,
+                color: activeChart === c ? "#FFF7E6" : "#6A5030",
+                fontFamily: FONT, fontSize: 15, fontWeight: 700, letterSpacing: 1,
               }}>
                 {c}
-                <span style={{ fontSize: 10, display: "block", letterSpacing: 1, opacity: 0.7, marginTop: 1 }}>
+                <span style={{ fontSize: 11, display: "block", fontWeight: 400, opacity: 0.75, marginTop: 1 }}>
                   {c === "D1" ? "Rasi" : "Navamsa"}
                 </span>
               </button>
@@ -546,32 +549,29 @@ export default function VedicAstrology() {
         </div>
 
         {/* Chart */}
-        <div ref={containerRef} style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-          <div style={{
-            padding: 10, borderRadius: "50%", background: "#FDFAF4",
-            boxShadow: "0 4px 24px rgba(120,90,40,0.15), 0 1px 4px rgba(120,90,40,0.1)",
-          }}>
+        <div ref={containerRef} style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+          <div style={{ padding: 8, borderRadius: "50%", background: "#FDFAF4",
+            boxShadow: "0 4px 28px rgba(100,80,30,0.14), 0 1px 4px rgba(100,80,30,0.08)" }}>
             <VedicChartCanvas positions={displayPos} retrogrades={retros} size={chartSize} />
           </div>
         </div>
 
-        {/* Retrograde note */}
+        {/* Retrograde summary */}
         {retros.size > 0 && (
-          <div style={{ textAlign: "center", marginBottom: 12, fontSize: 12, color: "#A03030" }}>
-            ℞ Retrograde: {[...retros].join(", ")}
+          <div style={{ textAlign: "center", marginBottom: 12, fontSize: 13,
+            color: "#8A1010", fontWeight: 500 }}>
+            ℞ Retrograde: {[...retros].join(" · ")}
           </div>
         )}
 
         {/* Table */}
-        <div style={cardStyle}>
-          <div style={{ fontSize: 11, letterSpacing: 2, color: "#A08040", marginBottom: 12, textTransform: "uppercase" }}>
-            Planetary Positions · Degrees within Sign (0°–30°)
-          </div>
+        <div style={card}>
+          <div style={{ ...label, marginBottom: 14 }}>Planetary Positions · Degrees within Sign (0° – 30°)</div>
           <PlanetTable d1Pos={d1Pos} d9Pos={d9Pos} retrogrades={retros} />
         </div>
 
-        <div style={{ textAlign: "center", color: "#B0965A", fontSize: 11, letterSpacing: 1, lineHeight: 1.8 }}>
-          Positions computed using mean orbital elements with Lahiri ayanamsa.<br/>
+        <div style={{ textAlign: "center", color: "#B09860", fontSize: 11, lineHeight: 1.9 }}>
+          Positions computed using mean orbital elements with Lahiri ayanamsa.<br />
           For precise Jyotish work, verify with dedicated ephemeris software.
         </div>
       </div>
