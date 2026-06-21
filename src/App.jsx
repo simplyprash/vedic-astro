@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as Astronomy from 'astronomy-engine';
 
 // ─── Astronomy ────────────────────────────────────────────────────────────────
 
@@ -12,109 +13,41 @@ function julianDay(date) {
 }
 
 function norm360(x) { return ((x % 360) + 360) % 360; }
-function r(d) { return d * Math.PI / 180; }
 
-// ── Lahiri ayanamsa (Chitrapaksha) ──────────────────────────────────────────
-// Reference: Astronomical Algorithms, Meeus; Swiss Ephemeris Lahiri definition
-// At J2000.0: 23°51'19.8" = 23.85550°; rate 50.2910"/yr = 1.39697°/century
-function lahiriAyanamsa(T) {
+// ── Lahiri ayanamsa ──────────────────────────────────────────────────────────
+function lahiriAyanamsa(jd) {
+  const T = (jd - 2451545.0) / 36525;
   return 23.85550 + 1.39697 * T;
 }
 
-// ── Full equation-of-centre helper ──────────────────────────────────────────
-function eqCentre(M_deg, T) {
-  const M = r(M_deg);
-  return (1.9146 - 0.004817*T - 0.000014*T*T) * Math.sin(M)
-       + (0.019993 - 0.000101*T) * Math.sin(2*M)
-       + 0.000290 * Math.sin(3*M);
-}
-
-// ── Planetary true longitudes (Meeus Ch.25/33, truncated perturbations) ─────
-// Accuracy: Sun ~0.01°, Moon ~0.3°, planets ~0.5–1°
+// ── Planetary positions using astronomy-engine (NASA JPL accuracy) ───────────
 function computePlanetaryPositions(date) {
-  const jd = julianDay(date);
-  const T  = (jd - 2451545.0) / 36525;
-  const aya = lahiriAyanamsa(T);
+  const jd  = date.getTime() / 86400000 + 2440587.5;
+  const aya = lahiriAyanamsa(jd);
 
-  // ── Sun ──────────────────────────────────────────────────────────────────
-  const L0sun = norm360(280.46646 + 36000.76983*T + 0.0003032*T*T);
-  const Msun  = norm360(357.52911 + 35999.05029*T - 0.0001537*T*T);
-  const sunLon = norm360(L0sun + eqCentre(Msun, T));
-
-  // ── Moon (Meeus Ch.47 truncated — ~0.3° accuracy) ────────────────────────
-  const Lm  = norm360(218.3165 + 481267.8813*T);   // mean longitude
-  const Mm  = norm360(134.9634 + 477198.8676*T);   // mean anomaly Moon
-  const Ms  = norm360(357.5291 +  35999.0503*T);   // mean anomaly Sun
-  const D   = norm360(297.8502 + 445267.1115*T);   // Moon elongation
-  const Om  = norm360(125.0445 -   1934.1363*T);   // ascending node
-  const moonLon = norm360(
-    Lm
-    + 6.2888 * Math.sin(r(Mm))
-    + 1.2740 * Math.sin(r(2*D - Mm))
-    + 0.6583 * Math.sin(r(2*D))
-    + 0.2136 * Math.sin(r(2*Mm))
-    - 0.1851 * Math.sin(r(Ms))
-    - 0.1143 * Math.sin(r(2*Om))
-    + 0.0588 * Math.sin(r(2*D - 2*Mm))
-    + 0.0572 * Math.sin(r(2*D - Ms - Mm))
-    + 0.0533 * Math.sin(r(2*D + Mm))
-    + 0.0458 * Math.sin(r(2*D - Ms))
-    + 0.0409 * Math.sin(r(Mm - Ms))
-    - 0.0347 * Math.sin(r(D))
-    + 0.0304 * Math.sin(r(Ms + Mm))
-  );
-
-  // ── Mercury ───────────────────────────────────────────────────────────────
-  const L0me = norm360(252.25084 + 149472.67411*T);
-  const Mme  = norm360(168.6562  + 479264.4730 *T);
-  const mercLon = norm360(L0me + eqCentre(Mme, T)
-    + 0.1322 * Math.sin(r(norm360(357.529 + 35999.050*T)))  // solar perturbation
-  );
-
-  // ── Venus ─────────────────────────────────────────────────────────────────
-  const L0ve = norm360(181.97973 + 58517.81538*T);
-  const Mve  = norm360( 48.0052  + 58517.8039 *T);
-  const venLon = norm360(L0ve + eqCentre(Mve, T)
-    - 0.1359 * Math.sin(r(norm360(Ms + 180)))               // solar perturbation
-  );
-
-  // ── Mars ──────────────────────────────────────────────────────────────────
-  const L0ma = norm360(355.43327 + 19140.29934*T);
-  const Mma  = norm360(319.5294  + 19139.8585 *T);
-  const marLon = norm360(L0ma + eqCentre(Mma, T)
-    + 0.2516 * Math.sin(r(norm360(2*Msun - Mma)))           // Jupiter/solar perturbation
-    + 0.1064 * Math.sin(r(Msun))
-  );
-
-  // ── Jupiter ───────────────────────────────────────────────────────────────
-  const L0ju = norm360( 34.35151 + 3034.90567*T);
-  const Mju  = norm360( 20.9     + 3034.906  *T);
-  const jupLon = norm360(L0ju + eqCentre(Mju, T)
-    - 0.3306 * Math.sin(r(norm360(2*Mju - 5*Mma + 67.6)))
-    + 0.0564 * Math.sin(r(norm360(Mju - Mma)))
-  );
-
-  // ── Saturn ────────────────────────────────────────────────────────────────
-  const L0sa = norm360( 50.07744 + 1222.11379*T);
-  const Msa  = norm360( 50.4     + 1222.114  *T);
-  const satLon = norm360(L0sa + eqCentre(Msa, T)
-    + 0.3956 * Math.sin(r(norm360(2*Mju - 5*Msa + 66.9)))
-    - 0.1296 * Math.sin(r(norm360(2*Mju - 6*Msa + 18.0)))
-  );
-
-  // ── Rahu (true node of Moon) ──────────────────────────────────────────────
-  const rahuLon = norm360(
-    125.04452 - 1934.13626*T + 0.002071*T*T
-    - 1.2740 * Math.sin(r(2*D))        // main perturbation
-    + 0.2136 * Math.sin(r(2*Mm))       // secondary
-  );
-
-  const tropical = { Sun: sunLon, Moon: moonLon, Mercury: mercLon, Venus: venLon,
-    Mars: marLon, Jupiter: jupLon, Saturn: satLon, Rahu: rahuLon };
-  tropical.Ketu = norm360(tropical.Rahu + 180);
+  const bodies = {
+    Sun:     Astronomy.Body.Sun,
+    Moon:    Astronomy.Body.Moon,
+    Mercury: Astronomy.Body.Mercury,
+    Venus:   Astronomy.Body.Venus,
+    Mars:    Astronomy.Body.Mars,
+    Jupiter: Astronomy.Body.Jupiter,
+    Saturn:  Astronomy.Body.Saturn,
+  };
 
   const sid = {};
-  for (const k in tropical) sid[k] = norm360(tropical[k] - aya);
+  for (const [name, body] of Object.entries(bodies)) {
+    const vec = Astronomy.GeoVector(body, date, true);
+    const ecl = Astronomy.Ecliptic(vec);
+    sid[name] = norm360(ecl.elon - aya);
+  }
+
+  // Mean lunar node (Rahu) — standard Vedic mean node
+  const T    = (jd - 2451545.0) / 36525;
+  const rahu = norm360(125.04452 - 1934.13626 * T + 0.002071 * T * T);
+  sid.Rahu   = norm360(rahu - aya);
+  sid.Ketu   = norm360(sid.Rahu + 180);
+
   return sid;
 }
 
